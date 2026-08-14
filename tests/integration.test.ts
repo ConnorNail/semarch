@@ -63,4 +63,18 @@ describe("arch check", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Cannot resolve relative import");
   });
+
+  it("resolves tsconfig aliases and distinguishes repositories from a shared provider", async () => {
+    const result = await runFixture("shared-repository-provider");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("Architecture violations (2)");
+    expect(result.stdout).toContain("assignment-submission.repository");
+    expect(result.stdout).toContain("course.repository");
+    expect(result.stdout).not.toContain("Target:\n  path: src/repositories/assignment.repository.ts");
+    expect(result.stdout).toContain(
+      "src/services/courseWork/assignment.service.ts\n  -> src/repositories/repositories.ts",
+    );
+    expect(result.stderr).toBe("");
+  });
 });

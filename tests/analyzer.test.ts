@@ -36,7 +36,7 @@ describe("TypeScript dependency extraction", () => {
       ].join("\n"),
     );
 
-    expect(parsed.dependencies.map((dependency) => dependency.reexportMappings)).toEqual([
+    expect(parsed.dependencies.map((dependency) => dependency.exportMappings)).toEqual([
       [
         { exportedName: "PublicFoo", importedName: "Foo" },
         { exportedName: "Bar", importedName: "Bar" },
@@ -50,5 +50,36 @@ describe("TypeScript dependency extraction", () => {
     expect(() => parseSource("broken.ts", "export const value = ;")).toThrow(
       /broken\.ts:1:\d+/,
     );
+  });
+
+  it("maps exported initialized values back to imported symbols", () => {
+    const parsed = parseSource(
+      "repositories.ts",
+      [
+        'import { Neo4jAssignmentRepository as Repository } from "./assignment.repository";',
+        "export const assignmentRepository = new Repository();",
+      ].join("\n"),
+    );
+
+    expect(parsed.dependencies[0]?.exportMappings).toEqual([
+      {
+        exportedName: "assignmentRepository",
+        importedName: "Neo4jAssignmentRepository",
+      },
+    ]);
+  });
+
+  it("maps local export lists back to imported symbols", () => {
+    const parsed = parseSource(
+      "index.ts",
+      [
+        'import { AssignmentRepository } from "./assignment.repository";',
+        "export { AssignmentRepository as Repository };",
+      ].join("\n"),
+    );
+
+    expect(parsed.dependencies[0]?.exportMappings).toEqual([
+      { exportedName: "Repository", importedName: "AssignmentRepository" },
+    ]);
   });
 });

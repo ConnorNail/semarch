@@ -1,0 +1,18 @@
+version: 1
+include: ["src/**/*.ts"]
+domains:
+  assignment:
+    match: ["src/**/assignment.*.ts"]
+  assignment-submission:
+    match: ["src/**/assignment-submission.*.ts"]
+  course:
+    match: ["src/**/course.*.ts"]
+components:
+  service:
+    match: ["**/*.service.ts"]
+  repository:
+    match: ["**/*.repository.ts"]
+  transport:
+    match: ["src/transport/**/*.ts"]
+rules:
+  - deny: service -> foreign.repository

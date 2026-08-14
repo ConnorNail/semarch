@@ -86,7 +86,7 @@ function effectiveTargets(edge: DependencyEdge): readonly EffectiveTarget[] {
   addEffectiveTarget(results, [edge.source, edge.target]);
 
   if (edge.importedNames === null) {
-    for (const dependencyPath of allReexportPaths(edge.target, new Set([edge.target.path]))) {
+    for (const dependencyPath of allExportOriginPaths(edge.target, new Set([edge.target.path]))) {
       addEveryTarget(results, [edge.source, ...dependencyPath]);
     }
   } else {
@@ -113,15 +113,15 @@ function symbolOriginPaths(
 
   if (module.localExports.has(symbol)) results.push([module]);
 
-  for (const edge of reexportsFrom(module)) {
+  for (const edge of exportOriginsFrom(module)) {
     if (isExternal(edge.target)) continue;
 
-    for (const mapping of edge.reexportMappings) {
+    for (const mapping of edge.exportMappings) {
       if (mapping.exportedName !== null && mapping.exportedName !== symbol) continue;
       if (mapping.exportedName === null && symbol === "default") continue;
 
       if (mapping.importedName === null && mapping.exportedName !== null) {
-        const namespacePaths = allReexportPaths(edge.target, new Set([edge.target.path]));
+        const namespacePaths = allExportOriginPaths(edge.target, new Set([edge.target.path]));
         results.push([module, edge.target]);
         for (const dependencyPath of namespacePaths) {
           results.push([module, ...dependencyPath]);
@@ -144,13 +144,13 @@ function symbolOriginPaths(
   return deduplicatePaths(results);
 }
 
-function allReexportPaths(
+function allExportOriginPaths(
   module: FileNode,
   active: ReadonlySet<string>,
 ): readonly (readonly FileNode[])[] {
   const results: FileNode[][] = [];
 
-  for (const edge of reexportsFrom(module)) {
+  for (const edge of exportOriginsFrom(module)) {
     if (isExternal(edge.target) || active.has(edge.target.path)) continue;
 
     const directPath = [module, edge.target];
@@ -158,7 +158,7 @@ function allReexportPaths(
     const nextActive = new Set(active);
     nextActive.add(edge.target.path);
 
-    for (const nestedPath of allReexportPaths(edge.target, nextActive)) {
+    for (const nestedPath of allExportOriginPaths(edge.target, nextActive)) {
       results.push([module, ...nestedPath]);
     }
   }
@@ -166,8 +166,8 @@ function allReexportPaths(
   return deduplicatePaths(results);
 }
 
-function reexportsFrom(file: FileNode): readonly DependencyEdge[] {
-  return file.dependencies.filter((edge) => edge.kind === "reexport");
+function exportOriginsFrom(file: FileNode): readonly DependencyEdge[] {
+  return file.dependencies.filter((edge) => edge.exportMappings.length > 0);
 }
 
 function addEveryTarget(

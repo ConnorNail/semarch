@@ -27,6 +27,7 @@ export async function discoverAndClassifyFiles(
   const discovered = (await fg([...config.include], options)).map(toPortablePath).sort();
   const discoveredSet = new Set(discovered);
   const componentMatches = new Map<string, string[]>();
+  const domainMatches = new Map<string, string[]>();
 
   for (const component of config.components) {
     const matches = await fg([...component.match], options);
@@ -41,8 +42,26 @@ export async function discoverAndClassifyFiles(
     }
   }
 
+  for (const domain of config.domains) {
+    if (domain.root !== undefined) {
+      for (const file of discovered) {
+        if (domain.root === "." || file.startsWith(`${domain.root}/`)) {
+          addMatch(domainMatches, file, domain.name);
+        }
+      }
+      continue;
+    }
+
+    const matches = await fg([...domain.match], options);
+    for (const candidate of matches) {
+      const file = toPortablePath(candidate);
+      if (discoveredSet.has(file)) addMatch(domainMatches, file, domain.name);
+    }
+  }
+
   return discovered.map((file) => {
     const matches = componentMatches.get(file) ?? [];
+    const matchedDomains = domainMatches.get(file) ?? [];
 
     if (matches.length > 1) {
       throw new ArchitectureError(
@@ -50,19 +69,26 @@ export async function discoverAndClassifyFiles(
       );
     }
 
+
+    if (matchedDomains.length > 1) {
+      throw new ArchitectureError(
+        `File "${file}" matches multiple domains: ${matchedDomains.sort().join(", ")}.`,
+      );
+    }
+
     return {
       path: file,
       absolutePath: path.join(projectRoot, ...file.split("/")),
-      domain: resolveDomain(file, config),
+      domain: matchedDomains[0],
       component: matches[0],
     };
   });
 }
 
-export function resolveDomain(file: string, config: ArchitectureConfig): string | undefined {
-  return config.domains.find(
-    (domain) => domain.root === "." || file.startsWith(`${domain.root}/`),
-  )?.name;
+function addMatch(matches: Map<string, string[]>, file: string, name: string): void {
+  const values = matches.get(file) ?? [];
+  values.push(name);
+  matches.set(file, values);
 }
 
 function toPortablePath(value: string): string {

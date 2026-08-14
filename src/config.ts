@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import fg from "fast-glob";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { ArchitectureError, describeError } from "./errors.js";
@@ -19,13 +20,28 @@ const identifierSchema = z
 
 const nonEmptyString = z.string().trim().min(1);
 
+const domainSchema = z
+  .object({
+    root: nonEmptyString.optional(),
+    match: z.array(nonEmptyString).min(1).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.root === undefined) === (value.match === undefined)) {
+      context.addIssue({
+        code: "custom",
+        message: 'must define exactly one of "root" or "match"',
+      });
+    }
+  });
+
 const rawConfigSchema = z
   .object({
     version: z.literal(1),
     include: z.array(nonEmptyString).min(1).optional(),
     exclude: z.array(nonEmptyString).optional(),
     domains: z
-      .record(identifierSchema, z.object({ root: nonEmptyString }).strict())
+      .record(identifierSchema, domainSchema)
       .refine((value) => Object.keys(value).length > 0, "must define at least one domain"),
     components: z
       .record(
@@ -79,10 +95,23 @@ export async function loadConfig(configPath: string): Promise<ArchitectureConfig
   }
 
   const domains = Object.entries(parsed.data.domains)
-    .map(([name, value]): DomainDefinition => ({
-      name,
-      root: normalizeProjectPath(value.root, `domain "${name}" root`),
-    }))
+    .map(([name, value]): DomainDefinition => {
+      if (value.root !== undefined) {
+        return {
+          name,
+          root: normalizeDomainRoot(value.root, name),
+          match: [],
+        };
+      }
+
+      return {
+        name,
+        root: undefined,
+        match: (value.match ?? []).map((pattern) =>
+          normalizeGlob(pattern, `domain "${name}"`),
+        ),
+      };
+    })
     .sort(compareByName);
 
   assertNonOverlappingDomains(domains);
@@ -130,6 +159,18 @@ function normalizeProjectPath(value: string, label: string): string {
   return normalized || ".";
 }
 
+function normalizeDomainRoot(value: string, domainName: string): string {
+  const root = normalizeProjectPath(value, `domain "${domainName}" root`);
+
+  if (fg.isDynamicPattern(root)) {
+    throw new ArchitectureError(
+      `Domain "${domainName}" root must be a literal directory path, not a glob. Use "match" for glob patterns.`,
+    );
+  }
+
+  return root;
+}
+
 function normalizeGlob(value: string, label: string): string {
   const portable = value.replaceAll("\\", "/");
 
@@ -152,6 +193,8 @@ function assertNonOverlappingDomains(domains: readonly DomainDefinition[]): void
     for (let rightIndex = leftIndex + 1; rightIndex < domains.length; rightIndex += 1) {
       const right = domains[rightIndex];
       if (right === undefined) continue;
+
+      if (left.root === undefined || right.root === undefined) continue;
 
       if (containsPath(left.root, right.root) || containsPath(right.root, left.root)) {
         throw new ArchitectureError(

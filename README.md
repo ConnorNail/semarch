@@ -61,6 +61,17 @@ rules:
 
 Domain roots and globs are relative to the project root. Domain roots may not overlap. A discovered file may have no domain or component, but matching more than one component is an error.
 
+`root` is always a literal directory. For domains whose files are spread across several directories, use `match` instead:
+
+```yaml
+domains:
+  assignment:
+    match:
+      - "src/**/assignment.*.ts"
+```
+
+Each domain must define exactly one of `root` or `match`. A file matching more than one domain is an error.
+
 The rule language supports:
 
 ```text
@@ -74,6 +85,8 @@ source-component -> foreign.target-component
 ## Behavior
 
 The checker recognizes default, named, namespace, side-effect, and type-only static imports. It also follows named, aliased, default, namespace, and wildcard static re-export chains. Named imports follow only the corresponding exported symbol; namespace and side-effect imports conservatively follow every static re-export.
+
+When a project has a `tsconfig.json`, its compiler options are used for module resolution, including `baseUrl` and `paths`. The checker also traces direct exported initializers back to imported identifiers, including `export const repository = new ImportedRepository()` and direct imported factory calls.
 
 All static dependencies, including type-only imports, are architecture dependencies. External packages, `node_modules`, paths outside the project, and local files omitted by `include` or `exclude` are not classified or checked.
 
@@ -109,6 +122,6 @@ See the [demo instructions](examples/demo-project/README.md) for the expected re
 
 ## v0.1 boundaries
 
-This release does not use a TypeScript `Program` or perform semantic type checking. It does not support dynamic imports, JavaScript files, tsconfig path aliases, runtime aliasing such as importing and later re-exporting a local binding, JSON output, watch mode, caching, plugins, or IDE integration. Only `arch.yaml` is discovered automatically.
+This release does not use a TypeScript `Program` or perform semantic type checking. It does not support dynamic imports, JavaScript files, computed or property-access initializer provenance, dependency-injection container lookups, JSON output, watch mode, caching, plugins, or IDE integration. Only `arch.yaml` and a root `tsconfig.json` are discovered automatically.
 
 The next analysis layer should be symbol and type information, but only after this import-graph prototype proves useful on real projects.

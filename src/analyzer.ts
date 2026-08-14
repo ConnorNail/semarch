@@ -7,9 +7,9 @@ import type {
   ArchitectureConfig,
   DependencyEdge,
   ExternalModule,
+  ExportMapping,
   FileNode,
   ProjectGraph,
-  ReexportMapping,
 } from "./types.js";
 
 export interface ParsedDependency {
@@ -18,7 +18,7 @@ export interface ParsedDependency {
   line: number;
   column: number;
   importedNames: readonly string[] | null;
-  reexportMappings: readonly ReexportMapping[];
+  exportMappings: readonly ExportMapping[];
 }
 
 export interface ParsedSource {
@@ -26,7 +26,26 @@ export interface ParsedSource {
   dependencies: readonly ParsedDependency[];
 }
 
-const compilerOptions: ts.CompilerOptions = {
+interface MutableParsedDependency extends ParsedDependency {
+  exportMappings: ExportMapping[];
+}
+
+interface ImportedBinding {
+  localName: string;
+  importedName: string;
+}
+
+interface ParsedImports {
+  importedNames: readonly string[] | null;
+  bindings: readonly ImportedBinding[];
+}
+
+interface InitializerCandidate {
+  exportedName: string;
+  localName: string;
+}
+
+const defaultCompilerOptions: ts.CompilerOptions = {
   allowJs: false,
   jsx: ts.JsxEmit.Preserve,
   module: ts.ModuleKind.NodeNext,
@@ -39,6 +58,12 @@ export async function buildProjectGraph(
   config: ArchitectureConfig,
 ): Promise<ProjectGraph> {
   const files = await discoverAndClassifyFiles(projectRoot, config);
+  const compilerOptions = loadProjectCompilerOptions(projectRoot);
+  const moduleResolutionCache = ts.createModuleResolutionCache(
+    projectRoot,
+    ts.sys.useCaseSensitiveFileNames ? (value) => value : (value) => value.toLowerCase(),
+    compilerOptions,
+  );
   const parsedFiles = await Promise.all(
     files.map(async (file) => {
       let source: string;
@@ -78,6 +103,8 @@ export async function buildProjectGraph(
         file.absolutePath,
         projectRoot,
         nodes,
+        compilerOptions,
+        moduleResolutionCache,
       );
 
       const edge: DependencyEdge = {
@@ -114,20 +141,35 @@ export function parseSource(filePath: string, source: string): ParsedSource {
     throw new ArchitectureError(`TypeScript syntax error:\n${messages.join("\n")}`);
   }
 
-  const dependencies: ParsedDependency[] = [];
+  const dependencies: MutableParsedDependency[] = [];
   const localExports = new Set<string>();
+  const importedBindings = new Map<
+    string,
+    { dependency: MutableParsedDependency; importedName: string }
+  >();
+  const initializerCandidates: InitializerCandidate[] = [];
 
   for (const statement of sourceFile.statements) {
     collectLocalExports(statement, localExports);
+    initializerCandidates.push(...collectInitializerCandidates(statement));
 
     if (ts.isImportDeclaration(statement) && ts.isStringLiteralLike(statement.moduleSpecifier)) {
-      dependencies.push({
+      const parsedImports = parseImports(statement.importClause);
+      const dependency: MutableParsedDependency = {
         kind: "import",
         specifier: statement.moduleSpecifier.text,
         ...sourceLocation(sourceFile, statement),
-        importedNames: importedNames(statement.importClause),
-        reexportMappings: [],
-      });
+        importedNames: parsedImports.importedNames,
+        exportMappings: [],
+      };
+      dependencies.push(dependency);
+
+      for (const binding of parsedImports.bindings) {
+        importedBindings.set(binding.localName, {
+          dependency,
+          importedName: binding.importedName,
+        });
+      }
       continue;
     }
 
@@ -136,40 +178,65 @@ export function parseSource(filePath: string, source: string): ParsedSource {
       statement.moduleSpecifier !== undefined &&
       ts.isStringLiteralLike(statement.moduleSpecifier)
     ) {
-      const mappings = reexportMappings(statement.exportClause);
+      const mappings = exportMappings(statement.exportClause);
       dependencies.push({
         kind: "reexport",
         specifier: statement.moduleSpecifier.text,
         ...sourceLocation(sourceFile, statement),
         importedNames: namesRequestedByReexport(mappings),
-        reexportMappings: mappings,
+        exportMappings: [...mappings],
       });
     }
+  }
+
+  for (const candidate of initializerCandidates) {
+    const origin = importedBindings.get(candidate.localName);
+    if (origin === undefined) continue;
+
+    origin.dependency.exportMappings.push({
+      exportedName: candidate.exportedName,
+      importedName: origin.importedName,
+    });
   }
 
   return { localExports, dependencies };
 }
 
-function importedNames(importClause: ts.ImportClause | undefined): readonly string[] | null {
-  if (importClause === undefined) return null;
+function parseImports(importClause: ts.ImportClause | undefined): ParsedImports {
+  if (importClause === undefined) return { importedNames: null, bindings: [] };
 
-  const names: string[] = [];
-  if (importClause.name !== undefined) names.push("default");
-
-  const bindings = importClause.namedBindings;
-  if (bindings === undefined) return names;
-  if (ts.isNamespaceImport(bindings)) return null;
-
-  for (const element of bindings.elements) {
-    names.push((element.propertyName ?? element.name).text);
+  const bindings: ImportedBinding[] = [];
+  if (importClause.name !== undefined) {
+    bindings.push({ localName: importClause.name.text, importedName: "default" });
   }
 
-  return [...new Set(names)];
+  const namedBindings = importClause.namedBindings;
+  if (namedBindings === undefined) {
+    return {
+      importedNames: [...new Set(bindings.map((binding) => binding.importedName))],
+      bindings,
+    };
+  }
+  if (ts.isNamespaceImport(namedBindings)) {
+    return { importedNames: null, bindings };
+  }
+
+  for (const element of namedBindings.elements) {
+    bindings.push({
+      localName: element.name.text,
+      importedName: (element.propertyName ?? element.name).text,
+    });
+  }
+
+  return {
+    importedNames: [...new Set(bindings.map((binding) => binding.importedName))],
+    bindings,
+  };
 }
 
-function reexportMappings(
+function exportMappings(
   exportClause: ts.NamedExportBindings | undefined,
-): readonly ReexportMapping[] {
+): readonly ExportMapping[] {
   if (exportClause === undefined) {
     return [{ exportedName: null, importedName: null }];
   }
@@ -185,10 +252,65 @@ function reexportMappings(
 }
 
 function namesRequestedByReexport(
-  mappings: readonly ReexportMapping[],
+  mappings: readonly ExportMapping[],
 ): readonly string[] | null {
   if (mappings.some((mapping) => mapping.importedName === null)) return null;
   return [...new Set(mappings.flatMap((mapping) => mapping.importedName ?? []))];
+}
+
+function collectInitializerCandidates(statement: ts.Statement): readonly InitializerCandidate[] {
+  if (
+    ts.isExportDeclaration(statement) &&
+    statement.moduleSpecifier === undefined &&
+    statement.exportClause !== undefined &&
+    ts.isNamedExports(statement.exportClause)
+  ) {
+    return statement.exportClause.elements.map((element) => ({
+      exportedName: element.name.text,
+      localName: (element.propertyName ?? element.name).text,
+    }));
+  }
+
+  if (!ts.isVariableStatement(statement) || !hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+    return [];
+  }
+
+  const candidates: InitializerCandidate[] = [];
+  for (const declaration of statement.declarationList.declarations) {
+    if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) continue;
+
+    const localName = importedIdentifierFromInitializer(declaration.initializer);
+    if (localName !== undefined) {
+      candidates.push({ exportedName: declaration.name.text, localName });
+    }
+  }
+  return candidates;
+}
+
+function importedIdentifierFromInitializer(initializer: ts.Expression): string | undefined {
+  let expression = unwrapExpression(initializer);
+
+  if (ts.isNewExpression(expression) || ts.isCallExpression(expression)) {
+    expression = unwrapExpression(expression.expression);
+  }
+
+  return ts.isIdentifier(expression) ? expression.text : undefined;
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+
+  return current;
 }
 
 function collectLocalExports(statement: ts.Statement, exports: Set<string>): void {
@@ -260,13 +382,21 @@ function resolveDependency(
   containingFile: string,
   projectRoot: string,
   nodes: ReadonlyMap<string, FileNode>,
+  compilerOptions: ts.CompilerOptions,
+  moduleResolutionCache: ts.ModuleResolutionCache,
 ): FileNode | ExternalModule {
-  if (!isRelativeSpecifier(specifier)) return externalModule(specifier);
-
-  const result = ts.resolveModuleName(specifier, containingFile, compilerOptions, ts.sys);
+  const result = ts.resolveModuleName(
+    specifier,
+    containingFile,
+    compilerOptions,
+    ts.sys,
+    moduleResolutionCache,
+  );
   const resolved = result.resolvedModule;
 
   if (resolved === undefined) {
+    if (!isRelativeSpecifier(specifier)) return externalModule(specifier);
+
     const sourcePath = toProjectPath(projectRoot, containingFile) ?? containingFile;
     throw new ArchitectureError(
       `Cannot resolve relative import "${specifier}" from ${sourcePath}.`,
@@ -283,6 +413,45 @@ function resolveDependency(
   }
 
   return nodes.get(targetPath) ?? externalModule(specifier);
+}
+
+function loadProjectCompilerOptions(projectRoot: string): ts.CompilerOptions {
+  const configPath = path.join(projectRoot, "tsconfig.json");
+  if (!ts.sys.fileExists(configPath)) return defaultCompilerOptions;
+
+  const loaded = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (loaded.error !== undefined) {
+    throw new ArchitectureError(
+      `Invalid TypeScript configuration:\n${formatTypeScriptDiagnostics([loaded.error], projectRoot)}`,
+    );
+  }
+
+  const parsed = ts.parseJsonConfigFileContent(
+    loaded.config,
+    ts.sys,
+    path.dirname(configPath),
+    undefined,
+    configPath,
+  );
+
+  if (parsed.errors.length > 0) {
+    throw new ArchitectureError(
+      `Invalid TypeScript configuration:\n${formatTypeScriptDiagnostics(parsed.errors, projectRoot)}`,
+    );
+  }
+
+  return parsed.options;
+}
+
+function formatTypeScriptDiagnostics(
+  diagnostics: readonly ts.Diagnostic[],
+  projectRoot: string,
+): string {
+  return ts.formatDiagnostics(diagnostics, {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => projectRoot,
+    getNewLine: () => "\n",
+  }).trimEnd();
 }
 
 function isRelativeSpecifier(specifier: string): boolean {

@@ -58,7 +58,7 @@ function suggestionFor(violation: Violation): string | undefined {
     violation.rule.domainRelation === "foreign" &&
     violation.rule.targetComponent === "repository"
   ) {
-    return `Depend on a ${violation.target.domain ?? "target-domain"} service or public API instead of its repository.`;
+    return `Depend on the ${violation.target.domain ?? "target"} domain's service or public API instead of its repository.`;
   }
   return undefined;
 }

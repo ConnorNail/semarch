@@ -2,7 +2,8 @@ export type DomainRelation = "local" | "foreign";
 
 export interface DomainDefinition {
   name: string;
-  root: string;
+  root: string | undefined;
+  match: readonly string[];
 }
 
 export interface ComponentDefinition {
@@ -31,7 +32,7 @@ export interface ExternalModule {
   specifier: string;
 }
 
-export interface ReexportMapping {
+export interface ExportMapping {
   exportedName: string | null;
   importedName: string | null;
 }
@@ -44,7 +45,7 @@ export interface DependencyEdge {
   line: number;
   column: number;
   importedNames: readonly string[] | null;
-  reexportMappings: readonly ReexportMapping[];
+  exportMappings: readonly ExportMapping[];
 }
 
 export interface FileNode {

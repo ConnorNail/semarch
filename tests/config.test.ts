@@ -48,6 +48,52 @@ describe("configuration", () => {
     );
   });
 
+  it("rejects glob patterns in a domain root", async () => {
+    const directory = await temporaryProject({
+      "arch.yaml": baseConfig.replace("root: src/users", 'root: "src/**/assignment.*.ts"'),
+    });
+
+    await expect(loadConfig(path.join(directory, "arch.yaml"))).rejects.toThrow(
+      'root must be a literal directory path, not a glob. Use "match"',
+    );
+  });
+
+  it("classifies domains with glob matches", async () => {
+    const directory = await temporaryProject({
+      "arch.yaml": baseConfig.replace(
+        "root: src/users",
+        'match: ["src/**/assignment.*.ts"]',
+      ),
+      "src/services/assignment.service.ts": "export class AssignmentService {}\n",
+    });
+    const config = await loadConfig(path.join(directory, "arch.yaml"));
+    const files = await discoverAndClassifyFiles(directory, config);
+
+    expect(files).toHaveLength(1);
+    expect(files[0]?.domain).toBe("users");
+  });
+
+  it("rejects files matching multiple domain patterns", async () => {
+    const configText = baseConfig.replace(
+      "  users:\n    root: src/users",
+      [
+        "  users:",
+        '    match: ["src/**/*.ts"]',
+        "  billing:",
+        '    match: ["src/**/assignment.*.ts"]',
+      ].join("\n"),
+    );
+    const directory = await temporaryProject({
+      "arch.yaml": configText,
+      "src/services/assignment.service.ts": "export class AssignmentService {}\n",
+    });
+    const config = await loadConfig(path.join(directory, "arch.yaml"));
+
+    await expect(discoverAndClassifyFiles(directory, config)).rejects.toThrow(
+      "matches multiple domains",
+    );
+  });
+
   it("rejects unknown fields and duplicate YAML keys", async () => {
     const unknownDirectory = await temporaryProject({
       "arch.yaml": `${baseConfig}unexpected: true\n`,
