@@ -1,0 +1,35 @@
+{
+  "name": "semantic-architecture-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A prototype CLI for enforcing architectural dependencies in TypeScript projects.",
+  "type": "module",
+  "bin": {
+    "arch": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "benchmark": "pnpm build && node scripts/benchmark.mjs"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3",
+    "typescript": "^5.9.3",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@10.14.0"
+}

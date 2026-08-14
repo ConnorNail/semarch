@@ -1,0 +1,14 @@
+version: 1
+include: ["src/**/*.ts"]
+domains:
+  users:
+    root: src/users
+  billing:
+    root: src/billing
+components:
+  service:
+    match: ["**/services/**/*.ts"]
+  repository:
+    match: ["**/repositories/**/*.ts"]
+rules:
+  - deny: service -> foreign.repository
