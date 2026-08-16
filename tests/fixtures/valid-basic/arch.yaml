@@ -1,5 +1,5 @@
 version: 1
-include: ["src/**/*.ts"]
+include: ["src/**/*.{ts,tsx}"]
 domains:
   users:
     root: src/users
@@ -9,7 +9,7 @@ components:
   service:
     match: ["**/services/**/*.ts"]
   repository:
-    match: ["**/repositories/**/*.ts"]
+    match: ["**/repositories/**/*.{ts,tsx}"]
   transport:
     match: ["src/transport/**/*.ts"]
 rules:

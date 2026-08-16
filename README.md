@@ -21,6 +21,7 @@ When installed as a package, the binary is named `arch`:
 arch check
 arch check ./some-project
 arch check ./some-project --config config/architecture.yaml
+arch inspect src/users/services/create-user.service.ts
 ```
 
 The project root defaults to the current directory. The configuration defaults to `arch.yaml` at that root; an explicit `--config` path is resolved relative to the project root.
@@ -88,13 +89,26 @@ The checker recognizes default, named, namespace, side-effect, and type-only sta
 
 When a project has a `tsconfig.json`, its compiler options are used for module resolution, including `baseUrl` and `paths`. The checker also traces direct exported initializers back to imported identifiers, including `export const repository = new ImportedRepository()` and direct imported factory calls.
 
-All static dependencies, including type-only imports, are architecture dependencies. External packages, `node_modules`, paths outside the project, and local files omitted by `include` or `exclude` are not classified or checked.
+All static dependencies, including type-only imports, are architecture dependencies. External packages, `node_modules`, and paths outside the project are not classified or checked. If an analyzed file imports a project-local TypeScript file omitted by `include` or `exclude`, the checker reports a configuration error rather than silently treating it as external. Imports matching a configured `tsconfig.json` path alias also produce a tool error when they cannot be resolved.
+
+Every check ends with classification counts for files without a domain or component. These counts are informational; unclassified files remain valid unless a rule requires their classification.
+
+## Inspecting the graph
+
+Use `inspect` when a dependency is unexpectedly allowed or rejected:
+
+```sh
+arch inspect src/services/courseWork/assignment.service.ts
+arch inspect src/services/courseWork/assignment.service.ts --root ./some-project
+```
+
+The command reports the file classification, each import's internal or external resolution, imported symbols, static re-export or initializer provenance paths, and any matching deny rules. Inspection succeeds with exit code `0` even when the selected file has architecture violations; configuration and analysis failures still exit with code `2`.
 
 Exit codes are stable:
 
 - `0`: no violations
 - `1`: one or more architecture violations
-- `2`: invalid configuration or a tool error, including ambiguous classification, TypeScript syntax errors, and unresolved relative imports
+- `2`: invalid configuration or a tool error, including ambiguous classification, TypeScript syntax errors, unresolved relative imports or configured aliases, and excluded internal TypeScript dependencies
 
 Diagnostics are plain text and deterministic. They include the import location and specifier, source and target classifications, violated rule, and the dependency path for a barrel traversal.
 

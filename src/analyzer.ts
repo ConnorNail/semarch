@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { isBuiltin } from "node:module";
 import path from "node:path";
 import ts from "typescript";
 import { ArchitectureError, describeError } from "./errors.js";
@@ -385,6 +386,8 @@ function resolveDependency(
   compilerOptions: ts.CompilerOptions,
   moduleResolutionCache: ts.ModuleResolutionCache,
 ): FileNode | ExternalModule {
+  if (isBuiltin(specifier) || hasProtocol(specifier)) return externalModule(specifier);
+
   const result = ts.resolveModuleName(
     specifier,
     containingFile,
@@ -395,9 +398,17 @@ function resolveDependency(
   const resolved = result.resolvedModule;
 
   if (resolved === undefined) {
-    if (!isRelativeSpecifier(specifier)) return externalModule(specifier);
-
     const sourcePath = toProjectPath(projectRoot, containingFile) ?? containingFile;
+
+    if (!isRelativeSpecifier(specifier)) {
+      if (matchesConfiguredPathAlias(specifier, compilerOptions.paths)) {
+        throw new ArchitectureError(
+          `Cannot resolve configured path alias "${specifier}" from ${sourcePath}. Check tsconfig.json paths and the import specifier.`,
+        );
+      }
+      return externalModule(specifier);
+    }
+
     throw new ArchitectureError(
       `Cannot resolve relative import "${specifier}" from ${sourcePath}.`,
     );
@@ -412,7 +423,21 @@ function resolveDependency(
     return externalModule(specifier);
   }
 
-  return nodes.get(targetPath) ?? externalModule(specifier);
+  const target = nodes.get(targetPath);
+  if (target !== undefined) return target;
+
+  if (isTypeScriptSource(targetPath)) {
+    const sourcePath = toProjectPath(projectRoot, containingFile) ?? containingFile;
+    throw new ArchitectureError(
+      `Import "${specifier}" from ${sourcePath} resolves to internal file ${targetPath}, but that file is excluded from analysis by arch.yaml include/exclude patterns.`,
+    );
+  }
+
+  return externalModule(specifier);
+}
+
+function hasProtocol(specifier: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier);
 }
 
 function loadProjectCompilerOptions(projectRoot: string): ts.CompilerOptions {
@@ -456,6 +481,30 @@ function formatTypeScriptDiagnostics(
 
 function isRelativeSpecifier(specifier: string): boolean {
   return specifier.startsWith("./") || specifier.startsWith("../");
+}
+
+function matchesConfiguredPathAlias(
+  specifier: string,
+  paths: ts.MapLike<readonly string[]> | undefined,
+): boolean {
+  if (paths === undefined) return false;
+
+  return Object.keys(paths).some((pattern) => {
+    const wildcard = pattern.indexOf("*");
+    if (wildcard === -1) return specifier === pattern;
+
+    const prefix = pattern.slice(0, wildcard);
+    const suffix = pattern.slice(wildcard + 1);
+    return (
+      specifier.length >= prefix.length + suffix.length &&
+      specifier.startsWith(prefix) &&
+      specifier.endsWith(suffix)
+    );
+  });
+}
+
+function isTypeScriptSource(filePath: string): boolean {
+  return /(?:\.d)?\.(?:ts|tsx|mts|cts)$/.test(filePath);
 }
 
 function toProjectPath(projectRoot: string, absolutePath: string): string | undefined {

@@ -18,6 +18,23 @@ export interface CheckOptions {
   configPath?: string;
 }
 
+export interface InspectedOrigin {
+  symbol: string | undefined;
+  path: readonly FileNode[];
+}
+
+export interface InspectedDependency {
+  edge: DependencyEdge;
+  origins: readonly InspectedOrigin[];
+}
+
+export interface InspectionResult {
+  graph: ProjectGraph;
+  file: FileNode;
+  dependencies: readonly InspectedDependency[];
+  violations: readonly Violation[];
+}
+
 export async function checkProject(options: CheckOptions): Promise<CheckResult> {
   const projectRoot = await resolveProjectRoot(options.projectRoot);
   const configPath = options.configPath === undefined
@@ -27,6 +44,31 @@ export async function checkProject(options: CheckOptions): Promise<CheckResult> 
   const graph = await buildProjectGraph(projectRoot, config);
   const violations = evaluateGraph(graph, config.rules);
   return { graph, violations };
+}
+
+export async function inspectProject(
+  options: CheckOptions,
+  filePath: string,
+): Promise<InspectionResult> {
+  const result = await checkProject(options);
+  const relativePath = projectRelativePath(result.graph.root, filePath);
+  const file = result.graph.files.get(relativePath);
+
+  if (file === undefined) {
+    throw new ArchitectureError(
+      `File "${filePath}" is not included in the analyzed project. Resolved project path: ${relativePath}.`,
+    );
+  }
+
+  return {
+    graph: result.graph,
+    file,
+    dependencies: file.dependencies.map((edge) => ({
+      edge,
+      origins: inspectOrigins(edge),
+    })),
+    violations: result.violations.filter((violation) => violation.source === file),
+  };
 }
 
 export function evaluateGraph(
@@ -77,6 +119,46 @@ export function evaluateGraph(
 interface EffectiveTarget {
   target: FileNode;
   path: readonly FileNode[];
+}
+
+function inspectOrigins(edge: DependencyEdge): readonly InspectedOrigin[] {
+  if (isExternal(edge.target)) return [];
+
+  const origins: InspectedOrigin[] = [];
+
+  if (edge.importedNames === null) {
+    for (const originPath of allExportOriginPaths(edge.target, new Set([edge.target.path]))) {
+      if (originPath.length > 1) {
+        origins.push({ symbol: undefined, path: [edge.source, ...originPath] });
+      }
+    }
+  } else {
+    for (const symbol of edge.importedNames) {
+      for (const originPath of symbolOriginPaths(
+        edge.target,
+        symbol,
+        new Set([`${edge.target.path}\0${symbol}`]),
+      )) {
+        if (originPath.length > 1) {
+          origins.push({ symbol, path: [edge.source, ...originPath] });
+        }
+      }
+    }
+  }
+
+  const unique = new Map<string, InspectedOrigin>();
+  for (const origin of origins) {
+    const key = `${origin.symbol ?? "*"}\0${origin.path.map((file) => file.path).join("\0")}`;
+    unique.set(key, origin);
+  }
+
+  return [...unique.values()].sort((left, right) => {
+    return (
+      (left.symbol ?? "").localeCompare(right.symbol ?? "") ||
+      left.path.at(-1)?.path.localeCompare(right.path.at(-1)?.path ?? "") ||
+      0
+    );
+  });
 }
 
 function effectiveTargets(edge: DependencyEdge): readonly EffectiveTarget[] {
@@ -228,4 +310,20 @@ async function resolveProjectRoot(candidate: string): Promise<string> {
       cause: error,
     });
   }
+}
+
+function projectRelativePath(projectRoot: string, candidate: string): string {
+  const absolute = path.isAbsolute(candidate) ? path.resolve(candidate) : path.resolve(projectRoot, candidate);
+  const relative = path.relative(projectRoot, absolute);
+
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new ArchitectureError(`Inspected file must be inside the project root: ${candidate}`);
+  }
+
+  return relative.split(path.sep).join("/");
 }

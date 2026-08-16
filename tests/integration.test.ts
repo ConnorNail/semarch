@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { runFixture } from "./helpers.js";
+import { runCli } from "../src/cli.js";
+import { fixturePath, runFixture } from "./helpers.js";
 
 describe("arch check", () => {
   it("accepts local repositories and foreign services", async () => {
@@ -7,6 +8,8 @@ describe("arch check", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("No architecture violations found");
+    expect(result.stdout).toContain("files: 5");
+    expect(result.stdout).toContain("fully unclassified: 0");
     expect(result.stderr).toBe("");
   });
 
@@ -64,6 +67,21 @@ describe("arch check", () => {
     expect(result.stderr).toContain("Cannot resolve relative import");
   });
 
+  it("rejects project-local TypeScript imports excluded from analysis", async () => {
+    const result = await runFixture("excluded-internal");
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("resolves to internal file");
+    expect(result.stderr).toContain("excluded from analysis");
+  });
+
+  it("rejects unresolved imports matching a configured tsconfig alias", async () => {
+    const result = await runFixture("unresolved-alias");
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('Cannot resolve configured path alias "@app/repositories/missing.repository"');
+  });
+
   it("resolves tsconfig aliases and distinguishes repositories from a shared provider", async () => {
     const result = await runFixture("shared-repository-provider");
 
@@ -76,5 +94,33 @@ describe("arch check", () => {
       "src/services/courseWork/assignment.service.ts\n  -> src/repositories/repositories.ts",
     );
     expect(result.stderr).toBe("");
+  });
+
+  it("inspects classifications, resolution, provenance, and matching violations", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "inspect",
+        "src/services/courseWork/assignment.service.ts",
+        "--root",
+        fixturePath("shared-repository-provider"),
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+    const output = stdout.join("\n");
+
+    expect(exitCode).toBe(0);
+    expect(output).toContain("Domain: assignment");
+    expect(output).toContain("resolution: internal");
+    expect(output).toContain("assignmentRepository:");
+    expect(output).toContain("src/repositories/assignment.repository.ts");
+    expect(output).toContain(
+      "service -> foreign.repository -> src/repositories/course.repository.ts",
+    );
+    expect(stderr).toEqual([]);
   });
 });
