@@ -1,4 +1,6 @@
-# Semantic Architecture Checker
+# Semarch
+
+Semantic Architecture Checker for TypeScript projects.
 
 An experimental CLI that checks dependency rules against the static import graph of a TypeScript project. It is deliberately small: filesystem classification, TypeScript syntax parsing, dependency resolution, rule matching, and readable diagnostics are kept visible in the code.
 
@@ -15,13 +17,13 @@ pnpm build
 node dist/index.js check path/to/project
 ```
 
-When installed as a package, the binary is named `arch`:
+When installed as a package, the binary is named `semarch`:
 
 ```sh
-arch check
-arch check ./some-project
-arch check ./some-project --config config/architecture.yaml
-arch inspect src/users/services/create-user.service.ts
+semarch check
+semarch check ./some-project
+semarch check ./some-project --config config/architecture.yaml
+semarch inspect src/users/services/create-user.service.ts
 ```
 
 The project root defaults to the current directory. The configuration defaults to `arch.yaml` at that root; an explicit `--config` path is resolved relative to the project root.
@@ -98,8 +100,8 @@ Every check ends with classification counts for files without a domain or compon
 Use `inspect` when a dependency is unexpectedly allowed or rejected:
 
 ```sh
-arch inspect src/services/courseWork/assignment.service.ts
-arch inspect src/services/courseWork/assignment.service.ts --root ./some-project
+semarch inspect src/services/courseWork/assignment.service.ts
+semarch inspect src/services/courseWork/assignment.service.ts --root ./some-project
 ```
 
 The command reports the file classification, each import's internal or external resolution, imported symbols, static re-export or initializer provenance paths, and any matching deny rules. Inspection succeeds with exit code `0` even when the selected file has architecture violations; configuration and analysis failures still exit with code `2`.

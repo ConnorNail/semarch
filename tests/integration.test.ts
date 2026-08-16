@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli.js";
 import { fixturePath, runFixture } from "./helpers.js";
 
-describe("arch check", () => {
+describe("semarch check", () => {
   it("accepts local repositories and foreign services", async () => {
     const result = await runFixture("valid-basic");
 

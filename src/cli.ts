@@ -13,13 +13,15 @@ export interface CliIO {
 
 export const VERSION = "0.1.0";
 
-const HELP = `Semantic Architecture Checker ${VERSION}
+const HELP = `Semarch ${VERSION}
+
+Semantic Architecture Checker
 
 Usage:
-  arch check [project-root] [--config path]
-  arch inspect <file> [--root project-root] [--config path]
-  arch --help
-  arch --version
+  semarch check [project-root] [--config path]
+  semarch inspect <file> [--root project-root] [--config path]
+  semarch --help
+  semarch --version
 
 Exit codes:
   0  No architecture violations

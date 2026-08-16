@@ -1,11 +1,11 @@
 {
-  "name": "semantic-architecture-checker",
+  "name": "semarch",
   "version": "0.1.0",
   "private": true,
   "description": "A prototype CLI for enforcing architectural dependencies in TypeScript projects.",
   "type": "module",
   "bin": {
-    "arch": "./dist/index.js"
+    "semarch": "./dist/index.js"
   },
   "files": [
     "dist",
