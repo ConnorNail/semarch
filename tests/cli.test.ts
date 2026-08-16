@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runCli } from "../src/cli.js";
+import { runCli, VERSION } from "../src/cli.js";
 
 describe("CLI argument handling", () => {
   it("prints help and version", async () => {
@@ -10,7 +10,7 @@ describe("CLI argument handling", () => {
     await expect(runCli(["--version"], io)).resolves.toBe(0);
     expect(output.join("\n")).toContain("semarch check [project-root]");
     expect(output.join("\n")).toContain("semarch inspect <file>");
-    expect(output).toContain("0.1.0");
+    expect(output).toContain(VERSION);
   });
 
   it("rejects unknown commands and options", async () => {

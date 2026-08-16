@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { checkProject, inspectProject } from "./check.js";
 import {
   formatClassificationSummary,
@@ -11,7 +12,15 @@ export interface CliIO {
   stderr: (message: string) => void;
 }
 
-export const VERSION = "0.1.0";
+const packageMetadata = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version?: unknown };
+
+if (typeof packageMetadata.version !== "string") {
+  throw new Error("package.json must define a string version.");
+}
+
+export const VERSION = packageMetadata.version;
 
 const HELP = `Semarch ${VERSION}
 

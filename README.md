@@ -7,17 +7,17 @@ An experimental CLI that checks dependency rules against the static import graph
 ## Requirements
 
 - Node.js 22 or newer
-- pnpm 10
 
 ## Install and run
 
+Once the package is published:
+
 ```sh
-pnpm install
-pnpm build
-node dist/index.js check path/to/project
+npm install --save-dev semarch
+npx semarch check
 ```
 
-When installed as a package, the binary is named `semarch`:
+The installed binary is named `semarch`:
 
 ```sh
 semarch check
@@ -116,14 +116,17 @@ Diagnostics are plain text and deterministic. They include the import location a
 
 ## Development
 
+Development requires pnpm 10.
+
 ```sh
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm package:smoke
 pnpm benchmark
 ```
 
-Tests combine focused unit cases with complete fixture projects. The benchmark generates 1,000 temporary source files and reports elapsed time; the prototype target is under two seconds on a development laptop, but timing is not a CI gate.
+Tests combine focused unit cases with complete fixture projects. The package smoke test builds the npm tarball, installs it into a temporary project, and exercises the installed `semarch` binary. The benchmark generates 1,000 temporary source files and reports elapsed time; the prototype target is under two seconds on a development laptop, but timing is not a CI gate.
 
 ## Demo project
 
