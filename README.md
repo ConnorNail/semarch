@@ -2,7 +2,7 @@
 
 **Enforce architectural boundaries in TypeScript.**
 
-Semarch is an experimental TypeScript architecture checker. It lets you classify files into domains and component roles, define forbidden dependencies, and check those rules against your project's static import graph.
+Semarch is an experimental architecture checker for TypeScript projects. It lets you classify files into domains and components, then define which dependencies between them are forbidden.
 
 Instead of relying only on documentation and code review to remember rules such as:
 
@@ -211,51 +211,28 @@ semarch inspect src/users/services/create-user.service.ts --root ./some-project
 - resolved imports
 - internal and external dependencies
 - imported symbols
-- static re-export and initializer provenance paths
+- dependency paths through barrel files and repository providers
 - matching deny rules
 
 Inspection exits with code `0` even when it displays architecture violations. Configuration and analysis errors still exit with code `2`.
 
 ## TypeScript dependency support
 
-When a root `tsconfig.json` is present, Semarch uses its compiler options for module resolution, including `baseUrl` and `paths`. A `tsconfig.json` is not required.
+Semarch follows static TypeScript imports and re-exports, including barrel files. When a root `tsconfig.json` is present, Semarch uses it for module resolution, including `baseUrl` and `paths`. Type-only imports count as architecture dependencies.
 
-Semarch recognizes static TypeScript dependencies including:
+External packages, `node_modules`, and paths outside the project are ignored. Excluded project-local files, unresolved relative imports, and unresolved configured path aliases are reported as errors rather than silently treated as external.
 
-- default and named imports
-- namespace imports
-- side-effect imports
-- type-only imports
-- named, aliased, default, namespace, and wildcard re-exports
-- barrel-file dependency paths
-
-Type-only imports count as architecture dependencies.
-
-For named imports, Semarch follows the corresponding exported symbol through static re-export chains. Namespace and side-effect imports conservatively follow every static re-export.
-
-Semarch also traces direct exported initializers to imported constructors or factories, including:
-
-```ts
-import { PostgresUserRepository } from "./user.repository";
-
-export const userRepository = new PostgresUserRepository();
-```
-
-External packages, `node_modules`, and paths outside the project are not architecture-checked. If an analyzed file imports a project-local TypeScript file omitted by `include` or `exclude`, Semarch reports a configuration error instead of silently treating it as external. An unresolved import matching a configured `tsconfig.json` alias is also an error.
+See [dependency analysis](https://github.com/ConnorNail/semarch/blob/main/docs/dependency-analysis.md) for exact traversal behavior and limitations.
 
 ## Diagnostics and exit codes
 
-Diagnostics are plain text and deterministic. They include the import location and specifier, source and target classifications, violated rule, and the dependency path for re-exports or exported initializers.
-
-Every check also reports classification counts for files without a domain or component. These counts are informational; unclassified files remain valid unless a rule requires their classification.
+Diagnostics identify the import location, source and target classifications, violated rule, and dependency path when relevant. Every check also reports informational counts for files without a domain or component.
 
 | Code | Meaning |
 | --- | --- |
 | `0` | No architecture violations |
 | `1` | Architecture violations found |
 | `2` | Invalid configuration or analysis error |
-
-Exit code `2` includes invalid YAML, ambiguous classification, TypeScript syntax errors, unresolved relative or configured-alias imports, and excluded internal TypeScript dependencies.
 
 ## Current scope
 
@@ -265,7 +242,6 @@ Semarch does not currently support:
 
 - dynamic imports
 - JavaScript files
-- computed or property-access initializer provenance
 - dependency-injection container lookups
 - JSON output
 - watch mode
@@ -297,6 +273,8 @@ Semarch is early, and feedback from real TypeScript projects is especially usefu
 - confusing configuration or diagnostics
 - incorrect module or dependency resolution
 - false positives or missed dependencies
+
+Bug fixes, tests, and documentation improvements are also welcome. For larger features or changes to the configuration model, please open an issue first.
 
 ## License
 
