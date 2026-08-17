@@ -1,12 +1,12 @@
 version: 1
 include: ["src/**/*.ts"]
 domains:
-  assignment:
-    match: ["src/**/assignment.*.ts"]
-  assignment-submission:
-    match: ["src/**/assignment-submission.*.ts"]
-  course:
-    match: ["src/**/course.*.ts"]
+  users:
+    match: ["src/**/user.*.ts"]
+  billing:
+    match: ["src/**/billing.*.ts"]
+  inventory:
+    match: ["src/**/inventory.*.ts"]
 components:
   service:
     match: ["**/*.service.ts"]

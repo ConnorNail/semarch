@@ -54,17 +54,17 @@ describe("TypeScript dependency extraction", () => {
 
   it("maps exported initialized values back to imported symbols", () => {
     const parsed = parseSource(
-      "repositories.ts",
+      "repository-provider.ts",
       [
-        'import { Neo4jAssignmentRepository as Repository } from "./assignment.repository";',
-        "export const assignmentRepository = new Repository();",
+        'import { UserRepositoryImplementation as Repository } from "./user.repository";',
+        "export const userRepository = new Repository();",
       ].join("\n"),
     );
 
     expect(parsed.dependencies[0]?.exportMappings).toEqual([
       {
-        exportedName: "assignmentRepository",
-        importedName: "Neo4jAssignmentRepository",
+        exportedName: "userRepository",
+        importedName: "UserRepositoryImplementation",
       },
     ]);
   });
@@ -73,13 +73,13 @@ describe("TypeScript dependency extraction", () => {
     const parsed = parseSource(
       "index.ts",
       [
-        'import { AssignmentRepository } from "./assignment.repository";',
-        "export { AssignmentRepository as Repository };",
+        'import { UserRepository } from "./user.repository";',
+        "export { UserRepository as Repository };",
       ].join("\n"),
     );
 
     expect(parsed.dependencies[0]?.exportMappings).toEqual([
-      { exportedName: "Repository", importedName: "AssignmentRepository" },
+      { exportedName: "Repository", importedName: "UserRepository" },
     ]);
   });
 });

@@ -122,9 +122,9 @@ If a domain is spread across multiple locations, use `match` instead:
 
 ```yaml
 domains:
-  assignment:
+  users:
     match:
-      - "src/**/assignment.*.ts"
+      - "src/**/user.*.ts"
 ```
 
 Each domain must define exactly one of `root` or `match`. A file may have no domain, but matching more than one domain is a configuration error.

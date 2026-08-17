@@ -50,7 +50,7 @@ describe("configuration", () => {
 
   it("rejects glob patterns in a domain root", async () => {
     const directory = await temporaryProject({
-      "arch.yaml": baseConfig.replace("root: src/users", 'root: "src/**/assignment.*.ts"'),
+      "arch.yaml": baseConfig.replace("root: src/users", 'root: "src/**/user.*.ts"'),
     });
 
     await expect(loadConfig(path.join(directory, "arch.yaml"))).rejects.toThrow(
@@ -62,9 +62,9 @@ describe("configuration", () => {
     const directory = await temporaryProject({
       "arch.yaml": baseConfig.replace(
         "root: src/users",
-        'match: ["src/**/assignment.*.ts"]',
+        'match: ["src/**/user.*.ts"]',
       ),
-      "src/services/assignment.service.ts": "export class AssignmentService {}\n",
+      "src/services/user.service.ts": "export class UserService {}\n",
     });
     const config = await loadConfig(path.join(directory, "arch.yaml"));
     const files = await discoverAndClassifyFiles(directory, config);
@@ -80,12 +80,12 @@ describe("configuration", () => {
         "  users:",
         '    match: ["src/**/*.ts"]',
         "  billing:",
-        '    match: ["src/**/assignment.*.ts"]',
+        '    match: ["src/**/user.*.ts"]',
       ].join("\n"),
     );
     const directory = await temporaryProject({
       "arch.yaml": configText,
-      "src/services/assignment.service.ts": "export class AssignmentService {}\n",
+      "src/services/user.service.ts": "export class UserService {}\n",
     });
     const config = await loadConfig(path.join(directory, "arch.yaml"));
 

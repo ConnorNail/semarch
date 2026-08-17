@@ -87,11 +87,11 @@ describe("semarch check", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("Architecture violations (2)");
-    expect(result.stdout).toContain("assignment-submission.repository");
-    expect(result.stdout).toContain("course.repository");
-    expect(result.stdout).not.toContain("Target:\n  path: src/repositories/assignment.repository.ts");
+    expect(result.stdout).toContain("billing.repository");
+    expect(result.stdout).toContain("inventory.repository");
+    expect(result.stdout).not.toContain("Target:\n  path: src/repositories/user.repository.ts");
     expect(result.stdout).toContain(
-      "src/services/courseWork/assignment.service.ts\n  -> src/repositories/repositories.ts",
+      "src/services/users/user.service.ts\n  -> src/repositories/repository-provider.ts",
     );
     expect(result.stderr).toBe("");
   });
@@ -102,7 +102,7 @@ describe("semarch check", () => {
     const exitCode = await runCli(
       [
         "inspect",
-        "src/services/courseWork/assignment.service.ts",
+        "src/services/users/user.service.ts",
         "--root",
         fixturePath("shared-repository-provider"),
       ],
@@ -114,12 +114,12 @@ describe("semarch check", () => {
     const output = stdout.join("\n");
 
     expect(exitCode).toBe(0);
-    expect(output).toContain("Domain: assignment");
+    expect(output).toContain("Domain: users");
     expect(output).toContain("resolution: internal");
-    expect(output).toContain("assignmentRepository:");
-    expect(output).toContain("src/repositories/assignment.repository.ts");
+    expect(output).toContain("userRepository:");
+    expect(output).toContain("src/repositories/user.repository.ts");
     expect(output).toContain(
-      "service -> foreign.repository -> src/repositories/course.repository.ts",
+      "service -> foreign.repository -> src/repositories/inventory.repository.ts",
     );
     expect(stderr).toEqual([]);
   });
