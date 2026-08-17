@@ -144,3 +144,7 @@ See the [demo instructions](examples/demo-project/README.md) for the expected re
 This release does not use a TypeScript `Program` or perform semantic type checking. It does not support dynamic imports, JavaScript files, computed or property-access initializer provenance, dependency-injection container lookups, JSON output, watch mode, caching, plugins, or IDE integration. Only `arch.yaml` and a root `tsconfig.json` are discovered automatically.
 
 The next analysis layer should be symbol and type information, but only after this import-graph prototype proves useful on real projects.
+
+## License
+
+[MIT](LICENSE.md)

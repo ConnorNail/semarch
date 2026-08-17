@@ -32,8 +32,11 @@ try {
   assert.equal(packedPackage.version, packageMetadata.version);
 
   const packedFiles = new Set(packedPackage.files.map((file) => file.path));
+  const cliFile = packedPackage.files.find((file) => file.path === "dist/index.js");
   assert(packedFiles.has("dist/index.js"), "Package must contain dist/index.js.");
+  assert.equal(cliFile.mode, 0o755, "dist/index.js must be executable.");
   assert(packedFiles.has("README.md"), "Package must contain README.md.");
+  assert(packedFiles.has("LICENSE.md"), "Package must contain LICENSE.md.");
   assert(
     [...packedFiles].every((file) => !file.startsWith("src/") && !file.startsWith("tests/")),
     "Package must not contain source or test files.",

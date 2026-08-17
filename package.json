@@ -1,11 +1,11 @@
 {
   "name": "semarch",
   "version": "0.1.0",
-  "private": true,
   "description": "A CLI for enforcing architectural dependency rules in TypeScript projects.",
+  "license": "MIT",
   "type": "module",
   "bin": {
-    "semarch": "./dist/index.js"
+    "semarch": "dist/index.js"
   },
   "files": [
     "dist",
@@ -30,7 +30,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/mark-cli-executable.mjs",
     "prepack": "pnpm build",
     "package:smoke": "pnpm build && node scripts/package-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
