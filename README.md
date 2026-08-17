@@ -1,34 +1,48 @@
 # Semarch
 
-Semantic Architecture Checker for TypeScript projects.
+**Enforce architectural boundaries in TypeScript.**
 
-An experimental CLI that checks dependency rules against the static import graph of a TypeScript project. It is deliberately small: filesystem classification, TypeScript syntax parsing, dependency resolution, rule matching, and readable diagnostics are kept visible in the code.
+Semarch is an experimental TypeScript architecture checker. It lets you classify files into domains and component roles, define forbidden dependencies, and check those rules against your project's static import graph.
 
-## Requirements
+Instead of relying only on documentation and code review to remember rules such as:
 
-- Node.js 22 or newer
+- services should not depend on transport-layer code
+- services should not directly access repositories owned by another domain
+- specific component types should not depend on one another
 
-## Install and run
+you can make those boundaries executable:
 
-Once the package is published:
+```yaml
+rules:
+  - deny: service -> transport
+  - deny: service -> foreign.repository
+```
+
+Then run:
 
 ```sh
-npm install --save-dev semarch
 npx semarch check
 ```
 
-The installed binary is named `semarch`:
+Semarch reports the source, target, violated rule, and import location for each violation. It also reports dependency paths when an import reaches a violation through a re-export or exported initializer. A foreign repository rule prevents direct repository access; teams can route that interaction through the other domain's service or public API.
+
+> Semarch is currently experimental. Version 0.1 focuses deliberately on static, file-level architecture before adding deeper symbol- and type-aware analysis.
+
+## Quick start
+
+### Requirements
+
+- Node.js 22 or newer
+
+### Install
+
+Install Semarch as a development dependency:
 
 ```sh
-semarch check
-semarch check ./some-project
-semarch check ./some-project --config config/architecture.yaml
-semarch inspect src/users/services/create-user.service.ts
+npm install --save-dev semarch
 ```
 
-The project root defaults to the current directory. The configuration defaults to `arch.yaml` at that root; an explicit `--config` path is resolved relative to the project root.
-
-## Configuration
+Create `arch.yaml` in your project root:
 
 ```yaml
 version: 1
@@ -43,6 +57,7 @@ exclude:
 domains:
   users:
     root: src/users
+
   billing:
     root: src/billing
 
@@ -50,9 +65,11 @@ components:
   service:
     match:
       - "**/services/**/*.ts"
+
   repository:
     match:
       - "**/repositories/**/*.ts"
+
   transport:
     match:
       - "src/transport/**/*.ts"
@@ -62,9 +79,46 @@ rules:
   - deny: service -> foreign.repository
 ```
 
-Domain roots and globs are relative to the project root. Domain roots may not overlap. A discovered file may have no domain or component, but matching more than one component is an error.
+Run the check:
 
-`root` is always a literal directory. For domains whose files are spread across several directories, use `match` instead:
+```sh
+npx semarch check
+```
+
+This dependency is allowed because the repository is local to the `users` domain:
+
+```text
+users.service -> users.repository
+```
+
+This dependency is denied because the service accesses a repository owned by `billing`:
+
+```text
+users.service -> billing.repository
+```
+
+Violations produce exit code `1`, making the same command suitable for local development and CI.
+
+## How configuration works
+
+Semarch describes file-level architecture using domains, components, and dependency rules. All paths and glob patterns are relative to the project root.
+
+### Domains
+
+Domains represent logical areas of an application:
+
+```yaml
+domains:
+  users:
+    root: src/users
+
+  billing:
+    root: src/billing
+```
+
+A file beneath `src/users` belongs to the `users` domain. Literal domain roots may not overlap.
+
+If a domain is spread across multiple locations, use `match` instead:
 
 ```yaml
 domains:
@@ -73,9 +127,28 @@ domains:
       - "src/**/assignment.*.ts"
 ```
 
-Each domain must define exactly one of `root` or `match`. A file matching more than one domain is an error.
+Each domain must define exactly one of `root` or `match`. A file may have no domain, but matching more than one domain is a configuration error.
 
-The rule language supports:
+### Components
+
+Components represent architectural roles:
+
+```yaml
+components:
+  service:
+    match:
+      - "**/services/**/*.ts"
+
+  repository:
+    match:
+      - "**/repositories/**/*.ts"
+```
+
+Component names are configurable. Names such as `service`, `repository`, and `transport` are conventions, not built-in concepts. A file may have no component, but matching more than one component is a configuration error.
+
+### Rules
+
+Version 0.1 supports deny rules between component types:
 
 ```text
 source-component -> target-component
@@ -83,67 +156,147 @@ source-component -> local.target-component
 source-component -> foreign.target-component
 ```
 
-`local` and `foreign` match only when both files belong to configured domains. Component names are configuration-defined; `service`, `repository`, and `transport` are conventions rather than hard-coded keywords.
+For example:
 
-## Behavior
-
-The checker recognizes default, named, namespace, side-effect, and type-only static imports. It also follows named, aliased, default, namespace, and wildcard static re-export chains. Named imports follow only the corresponding exported symbol; namespace and side-effect imports conservatively follow every static re-export.
-
-When a project has a `tsconfig.json`, its compiler options are used for module resolution, including `baseUrl` and `paths`. The checker also traces direct exported initializers back to imported identifiers, including `export const repository = new ImportedRepository()` and direct imported factory calls.
-
-All static dependencies, including type-only imports, are architecture dependencies. External packages, `node_modules`, and paths outside the project are not classified or checked. If an analyzed file imports a project-local TypeScript file omitted by `include` or `exclude`, the checker reports a configuration error rather than silently treating it as external. Imports matching a configured `tsconfig.json` path alias also produce a tool error when they cannot be resolved.
-
-Every check ends with classification counts for files without a domain or component. These counts are informational; unclassified files remain valid unless a rule requires their classification.
-
-## Inspecting the graph
-
-Use `inspect` when a dependency is unexpectedly allowed or rejected:
-
-```sh
-semarch inspect src/services/courseWork/assignment.service.ts
-semarch inspect src/services/courseWork/assignment.service.ts --root ./some-project
+```yaml
+rules:
+  - deny: service -> transport
+  - deny: service -> foreign.repository
 ```
 
-The command reports the file classification, each import's internal or external resolution, imported symbols, static re-export or initializer provenance paths, and any matching deny rules. Inspection succeeds with exit code `0` even when the selected file has architecture violations; configuration and analysis failures still exit with code `2`.
+`local` means the source and target belong to the same configured domain. `foreign` means they belong to different configured domains. Relational rules match only when both files have a domain.
 
-Exit codes are stable:
+With the configuration above:
 
-- `0`: no violations
-- `1`: one or more architecture violations
-- `2`: invalid configuration or a tool error, including ambiguous classification, TypeScript syntax errors, unresolved relative imports or configured aliases, and excluded internal TypeScript dependencies
-
-Diagnostics are plain text and deterministic. They include the import location and specifier, source and target classifications, violated rule, and the dependency path for a barrel traversal.
-
-## Development
-
-Development requires pnpm 10.
-
-```sh
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm package:smoke
-pnpm benchmark
+```text
+users.service -> users.repository       allowed
+users.service -> billing.service        allowed
+users.service -> billing.repository     denied
 ```
 
-Tests combine focused unit cases with complete fixture projects. The package smoke test builds the npm tarball, installs it into a temporary project, and exercises the installed `semarch` binary. The benchmark generates 1,000 temporary source files and reports elapsed time; the prototype target is under two seconds on a development laptop, but timing is not a CI gate.
+## Commands
 
-## Demo project
+Check the current project:
 
-A deliberately broken example is available in [`examples/demo-project`](examples/demo-project). It includes valid local-repository and cross-domain-service dependencies, plus transport and barrel-mediated foreign-repository violations.
+```sh
+semarch check
+```
+
+Check another project:
+
+```sh
+semarch check ./some-project
+```
+
+Use a different configuration file:
+
+```sh
+semarch check ./some-project --config config/architecture.yaml
+```
+
+The project root defaults to the current directory. Semarch requires `arch.yaml` at that root unless `--config` is provided.
+
+### Inspect a file
+
+If a dependency is unexpectedly allowed or rejected, inspect the file to see how Semarch resolved it:
+
+```sh
+semarch inspect src/users/services/create-user.service.ts
+semarch inspect src/users/services/create-user.service.ts --root ./some-project
+```
+
+`inspect` reports:
+
+- domain and component classification
+- resolved imports
+- internal and external dependencies
+- imported symbols
+- static re-export and initializer provenance paths
+- matching deny rules
+
+Inspection exits with code `0` even when it displays architecture violations. Configuration and analysis errors still exit with code `2`.
+
+## TypeScript dependency support
+
+When a root `tsconfig.json` is present, Semarch uses its compiler options for module resolution, including `baseUrl` and `paths`. A `tsconfig.json` is not required.
+
+Semarch recognizes static TypeScript dependencies including:
+
+- default and named imports
+- namespace imports
+- side-effect imports
+- type-only imports
+- named, aliased, default, namespace, and wildcard re-exports
+- barrel-file dependency paths
+
+Type-only imports count as architecture dependencies.
+
+For named imports, Semarch follows the corresponding exported symbol through static re-export chains. Namespace and side-effect imports conservatively follow every static re-export.
+
+Semarch also traces direct exported initializers to imported constructors or factories, including:
+
+```ts
+import { PostgresUserRepository } from "./user.repository";
+
+export const userRepository = new PostgresUserRepository();
+```
+
+External packages, `node_modules`, and paths outside the project are not architecture-checked. If an analyzed file imports a project-local TypeScript file omitted by `include` or `exclude`, Semarch reports a configuration error instead of silently treating it as external. An unresolved import matching a configured `tsconfig.json` alias is also an error.
+
+## Diagnostics and exit codes
+
+Diagnostics are plain text and deterministic. They include the import location and specifier, source and target classifications, violated rule, and the dependency path for re-exports or exported initializers.
+
+Every check also reports classification counts for files without a domain or component. These counts are informational; unclassified files remain valid unless a rule requires their classification.
+
+| Code | Meaning |
+| --- | --- |
+| `0` | No architecture violations |
+| `1` | Architecture violations found |
+| `2` | Invalid configuration or analysis error |
+
+Exit code `2` includes invalid YAML, ambiguous classification, TypeScript syntax errors, unresolved relative or configured-alias imports, and excluded internal TypeScript dependencies.
+
+## Current scope
+
+Version 0.1 deliberately focuses on the static TypeScript file dependency graph. It does not use a TypeScript `Program` or perform semantic type checking.
+
+Semarch does not currently support:
+
+- dynamic imports
+- JavaScript files
+- computed or property-access initializer provenance
+- dependency-injection container lookups
+- JSON output
+- watch mode
+- caching
+- plugins
+- IDE integration
+
+Only a root `arch.yaml` and root `tsconfig.json` are discovered automatically. The longer-term direction may include symbol- and type-aware rules, but only after the current architecture model has been tested against real projects.
+
+## Demo
+
+A deliberately broken example project is available in [`examples/demo-project`](examples/demo-project). It contains allowed dependencies and intentional transport and cross-domain repository violations.
+
+From a source checkout, run:
 
 ```sh
 pnpm build
 node dist/index.js check examples/demo-project
 ```
 
-See the [demo instructions](examples/demo-project/README.md) for the expected results and how to make the project pass.
+See the [demo instructions](examples/demo-project/README.md) for the expected result and how to make the project pass.
 
-## v0.1 boundaries
+## Feedback
 
-This release does not use a TypeScript `Program` or perform semantic type checking. It does not support dynamic imports, JavaScript files, computed or property-access initializer provenance, dependency-injection container lookups, JSON output, watch mode, caching, plugins, or IDE integration. Only `arch.yaml` and a root `tsconfig.json` are discovered automatically.
+Semarch is early, and feedback from real TypeScript projects is especially useful. Please open an issue for:
 
-The next analysis layer should be symbol and type information, but only after this import-graph prototype proves useful on real projects.
+- architecture rules that are difficult to express
+- project structures Semarch handles incorrectly
+- confusing configuration or diagnostics
+- incorrect module or dependency resolution
+- false positives or missed dependencies
 
 ## License
 
