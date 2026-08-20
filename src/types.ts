@@ -59,6 +59,7 @@ export interface FileNode {
 
 export interface ProjectGraph {
   root: string;
+  hasConfiguredDomains: boolean;
   files: ReadonlyMap<string, FileNode>;
 }
 

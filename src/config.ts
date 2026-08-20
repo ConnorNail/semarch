@@ -40,9 +40,7 @@ const rawConfigSchema = z
     version: z.literal(1),
     include: z.array(nonEmptyString).min(1).optional(),
     exclude: z.array(nonEmptyString).optional(),
-    domains: z
-      .record(identifierSchema, domainSchema)
-      .refine((value) => Object.keys(value).length > 0, "must define at least one domain"),
+    domains: z.record(identifierSchema, domainSchema).default({}),
     components: z
       .record(
         identifierSchema,
@@ -125,6 +123,16 @@ export async function loadConfig(configPath: string): Promise<ArchitectureConfig
 
   const componentNames = new Set(components.map((component) => component.name));
   const rules = parsed.data.rules.map(({ deny }) => parseRule(deny, componentNames));
+
+  if (domains.length === 0) {
+    const relationalRule = rules.find((rule) => rule.domainRelation !== undefined);
+    if (relationalRule !== undefined) {
+      throw new ArchitectureError(
+        `Rule "${relationalRule.display}" uses a domain relation, but no domains are configured.`,
+      );
+    }
+  }
+
   const include = (parsed.data.include ?? DEFAULT_INCLUDE).map((pattern) =>
     normalizeGlob(pattern, "include"),
   );

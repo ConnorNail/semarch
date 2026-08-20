@@ -35,6 +35,33 @@ describe("configuration", () => {
     ]);
   });
 
+  it("allows domains to be omitted or empty for component-only rules", async () => {
+    const componentOnlyConfig = baseConfig.replace(
+      "domains:\n  users:\n    root: src/users\n",
+      "",
+    ).replace("foreign.repository", "repository");
+
+    for (const source of [componentOnlyConfig, `domains: {}\n${componentOnlyConfig}`]) {
+      const directory = await temporaryProject({ "arch.yaml": source });
+      const config = await loadConfig(path.join(directory, "arch.yaml"));
+
+      expect(config.domains).toEqual([]);
+    }
+  });
+
+  it("rejects relational rules when no domains are configured", async () => {
+    const directory = await temporaryProject({
+      "arch.yaml": baseConfig.replace(
+        "domains:\n  users:\n    root: src/users\n",
+        "",
+      ),
+    });
+
+    await expect(loadConfig(path.join(directory, "arch.yaml"))).rejects.toThrow(
+      'Rule "service -> foreign.repository" uses a domain relation, but no domains are configured.',
+    );
+  });
+
   it("rejects overlapping domain roots", async () => {
     const directory = await temporaryProject({
       "arch.yaml": baseConfig.replace(

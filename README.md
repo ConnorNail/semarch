@@ -129,6 +129,8 @@ domains:
 
 Each domain must define exactly one of `root` or `match`. A file may have no domain, but matching more than one domain is a configuration error.
 
+Domains may be omitted when rules only describe component relationships. Rules using `local` or `foreign` require at least one configured domain.
+
 ### Components
 
 Components represent architectural roles:

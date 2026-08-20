@@ -1,0 +1,13 @@
+version: 1
+
+components:
+  job:
+    match:
+      - "src/jobs/**/*.ts"
+
+  repository:
+    match:
+      - "src/repositories/**/*.ts"
+
+rules:
+  - deny: job -> repository
