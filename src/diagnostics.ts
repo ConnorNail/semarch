@@ -60,13 +60,20 @@ export function formatClassificationSummary(graph: ProjectGraph): string {
     (file) => file.domain === undefined && file.component === undefined,
   ).length;
 
-  return [
+  const lines = [
     "Classification:",
     `  files: ${files.length}`,
-    `  without domain: ${withoutDomain}`,
+  ];
+
+  lines.push(
+    graph.hasConfiguredDomains
+      ? `  without domain: ${withoutDomain}`
+      : "  domains: not configured",
     `  without component: ${withoutComponent}`,
     `  fully unclassified: ${fullyUnclassified}`,
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }
 
 export function formatInspection(result: InspectionResult): string {

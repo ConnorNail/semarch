@@ -3,6 +3,15 @@ import { runCli } from "../src/cli.js";
 import { fixturePath, runFixture } from "./helpers.js";
 
 describe("semarch check", () => {
+  it("enforces component rules without configured domains", async () => {
+    const result = await runFixture("component-only");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("job -> repository");
+    expect(result.stdout).toContain("domains: not configured");
+    expect(result.stderr).toBe("");
+  });
+
   it("accepts local repositories and foreign services", async () => {
     const result = await runFixture("valid-basic");
 

@@ -117,7 +117,11 @@ export async function buildProjectGraph(
     }
   }
 
-  return { root: projectRoot, files: nodes };
+  return {
+    root: projectRoot,
+    hasConfiguredDomains: config.domains.length > 0,
+    files: nodes,
+  };
 }
 
 export function parseSource(filePath: string, source: string): ParsedSource {
